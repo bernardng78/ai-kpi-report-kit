@@ -1,0 +1,6 @@
+pandas>=2.2
+numpy>=2.0
+openpyxl>=3.1
+# tests only
+formulas>=1.2
+pytest>=8

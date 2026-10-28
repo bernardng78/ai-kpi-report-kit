@@ -6,5 +6,7 @@ __pycache__/
 *.pyc
 .venv/
 
-# Generated reports (curated samples are committed separately)
+# Generated reports and the synthetic exports behind them (python -m kpi_kit demo rebuilds both)
 output/
+data/raw/
+.pytest_cache/
