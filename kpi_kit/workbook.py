@@ -420,6 +420,8 @@ def _trend_charts(ws, grain: str, data: PeriodData, kpi_cols: dict[str, dict[str
     head = 3
     unit = {"week": "weeks", "month": "months", "quarter": "quarters"}[grain]
     data_ws.cell(1, c0, f"{ws.title}: last {n} {unit} up to the chosen one").font = _font(bold=True)
+    data_ws.cell(2, c0, "#N/A marks a period with no figure yet, so the chart skips it.").font = \
+        _font(color=d.MUTED, italic=True)
     series = [(None, "Period", None), (("net_rev", "actual"), "Net revenue", d.NUMBER_FORMAT["money"]),
               (("net_rev", "target"), "Target", d.NUMBER_FORMAT["money"]),
               (("cr", "actual"), "Conversion rate", d.NUMBER_FORMAT["pct2"]),
@@ -433,9 +435,10 @@ def _trend_charts(ws, grain: str, data: PeriodData, kpi_cols: dict[str, dict[str
             back = n - 1 - k
             column = "A" if source is None else kpi_cols[source[0]][source[1]]
             value = f"INDEX({col(column)},{row_cell}{f'-{back}' if back else ''})"
-            shown = value if source is None else f'IF(ISNUMBER({value}),{value},"")'
+            missing = '""' if source is None else "NA()"  # Excel plots "" as zero; it skips #N/A
+            shown = value if source is None else f"IF(ISNUMBER({value}),{value},{missing})"
             cell = data_ws[f"{letter}{head + 1 + k}"]
-            cell.value = f'=IF({row_cell}>{back},{shown},"")'
+            cell.value = f"=IF({row_cell}>{back},{shown},{missing})"
             cell.font = _font()
             if fmt:
                 cell.number_format = fmt
@@ -445,6 +448,7 @@ def _trend_charts(ws, grain: str, data: PeriodData, kpi_cols: dict[str, dict[str
     for title, first_col, fmt, anchor, width, floor in charts:
         chart = LineChart()
         chart.title = f"{title}, last {n} {unit}"
+        chart.title.overlay = False  # openpyxl leaves this unset, and Excel then draws the title over the plot
         chart.height, chart.width = 7.4, width
         chart.y_axis.scaling.min = floor
         chart.add_data(Reference(data_ws, min_col=first_col, max_col=first_col + 1, min_row=head, max_row=head + n),
@@ -461,6 +465,7 @@ def _trend_charts(ws, grain: str, data: PeriodData, kpi_cols: dict[str, dict[str
         chart.x_axis.delete = False
         chart.y_axis.delete = False
         chart.legend.position = "b"
+        chart.legend.overlay = False  # same for the legend, which otherwise covers the period labels
         ws.add_chart(chart, anchor)
 
 

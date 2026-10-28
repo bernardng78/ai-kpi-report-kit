@@ -8,7 +8,7 @@ Built with Claude Code on synthetic data: nothing here comes from a real store.
 
 ## What it produces
 
-- **`output/kpi-report.xlsx`.** Report tabs with a period picker sit on top of KPI tabs. On the KPI tabs, every actual, target, miss and band is a formula you can click and trace back to the period data. It uses only long-established functions (`INDEX`, `MATCH`, `SUM`, `QUARTILE`), so it works in Excel, Google Sheets and LibreOffice.
+- **`output/kpi-report.xlsx`.** Report tabs with a period picker sit on top of KPI tabs. On the KPI tabs, every actual, target, miss and band is a formula you can click and trace back to the period data. It uses only long-established functions (`INDEX`, `MATCH`, `SUM`, `QUARTILE`), and it has been checked in Excel for Microsoft 365 and in Google Sheets.
 - **`output/kpi-report.html`.** The same numbers as one shareable page with trend charts, for readers who won't open a spreadsheet.
 
 ## Run it
@@ -124,7 +124,7 @@ pytest
 ```
 
 - One test re-derives a target and its band by hand, from the method as written above.
-- Another loads the built workbook into an independent formula engine (the `formulas` package) and compares all 14,598 KPI-tab values, plus each report tab's statuses, with the Python results. It runs in about a minute.
+- Another loads the built workbook into an independent formula engine (the `formulas` package) and compares all 14,544 KPI-tab values, plus the 54 statuses on the report tabs, with the Python results. It runs in about a minute.
 
 ## Assumptions
 
