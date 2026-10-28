@@ -13,7 +13,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from .config import GRAIN_LABEL, WINDOWS, Config
+from .config import DEFAULT_BAND, GRAIN_LABEL, WINDOWS, Config
 from .facts import GRAINS, PeriodData
 from .kpis import KPI_BY_ID, KPIS, SECTIONS
 
@@ -194,9 +194,11 @@ def _panel(grain: str, key: str, data: PeriodData, results: dict[str, pd.DataFra
         for k in [k for k in KPIS if k.section == section]:
             r = results[k.id].loc[key]
             ly = results[k.id]["actual"].iloc[pos - lag] if pos >= lag else np.nan
+            band = r["band"] if np.isfinite(r["band"]) else DEFAULT_BAND
+            swing = f"±{band * 50:.1f}%" if np.isfinite(r["perf"]) else "–"  # half the band
             rows.append(f"<tr><th scope='row'>{escape(k.label)}</th><td>{fmt(r['actual'], k.fmt)}</td>"
                         f"<td>{fmt(r['target'], k.fmt)}</td><td>{signed(r['perf'])}</td><td>{chip(r['status'])}</td>"
-                        f"<td>{fmt(ly, k.fmt)}</td></tr>")
+                        f"<td class='swing'>{swing}</td><td>{fmt(ly, k.fmt)}</td></tr>")
         acts = actions[(actions["grain"] == grain) & (actions["key"] == key) & (actions["section"] == section)]
         items = "".join(f"<li>{escape(t)}</li>" for t in acts["text"])
         chart = _chart(f"c-{grain}-{SECTIONS.index(section)}", SECTION_CHART[section], results[SECTION_CHART[section]],
@@ -205,7 +207,7 @@ def _panel(grain: str, key: str, data: PeriodData, results: dict[str, pd.DataFra
 <section class="card">
   <h2>{escape(section)}</h2>
   <div class="scroll"><table class="kpis">
-    <thead><tr><th>KPI</th><th>Actual</th><th>Target</th><th>vs target</th><th>Status</th><th>Last year</th></tr></thead>
+    <thead><tr><th>KPI</th><th>Actual</th><th>Target</th><th>vs target</th><th>Status</th><th>Normal swing</th><th>Last year</th></tr></thead>
     <tbody>{''.join(rows)}</tbody></table></div>
   {chart}
   <h3>What to do</h3>
@@ -309,6 +311,7 @@ table { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nu
 .kpis th, .kpis td { padding: 7px 10px; border-bottom: 1px solid var(--grid); text-align: right; white-space: nowrap; }
 .kpis th:first-child { text-align: left; font-weight: 500; }
 .kpis td:nth-child(5), .kpis thead th:nth-child(5) { text-align: left; }
+.kpis td.swing { color: var(--ink-2); }
 .kpis thead th { color: var(--ink-2); font-weight: 500; font-size: 13px; }
 .actions { margin: 0; padding-left: 20px; } .actions li { margin: 4px 0; }
 .chart { margin: 14px 0 0; }
@@ -348,8 +351,9 @@ footer { color: var(--muted); font-size: 13px; margin-top: 24px; }
 <main>
 <nav role="tablist" aria-label="Report period">{{TABS}}</nav>
 {{PANELS}}
-<footer>Targets come from the brand's own history: the same period last year scaled by current growth. Status bands
-come from each KPI's own past misses. Built with Claude Code from raw store, ad and analytics exports.</footer>
+<footer>Targets come from the brand's own history: the same period last year scaled by current growth. Each KPI's
+normal swing comes from its own past misses: a miss within it is on track, up to twice it is watch, beyond that is off
+track. Built with Claude Code from raw store, ad and analytics exports.</footer>
 </main>
 <script>
 (() => {

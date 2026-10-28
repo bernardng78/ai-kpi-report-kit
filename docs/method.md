@@ -26,21 +26,21 @@ target  = anchor × min(1.5, max(0.67, growth))
 - **No target on a half-empty year.** A target appears only once every window it needs has data. With three years of exports, weekly targets start in February 2025.
 - **What a target means.** It asks whether this period is in line with the brand's own trajectory for the season. It doesn't encode an ambition. An agreed goal, such as an MER floor, belongs in a separate column so it never gets mistaken for the data-driven target.
 
-## Status bands
+## Normal swing and status
 
-The band is the interquartile range of the KPI's own misses (actual ÷ target − 1) over the previous 13 weeks (6 months, 4 quarters), kept between 2% and 40%.
+The band is the interquartile range of the KPI's own misses (actual ÷ target − 1) over the previous 13 weeks (6 months, 4 quarters), kept between 2% and 40%. Half of it is the KPI's normal swing, which the report shows next to every status.
 
 | Status | Miss |
 |---|---|
-| On track | within half the band |
-| Watch | within the band |
-| Off track | beyond the band |
+| On track | within the normal swing |
+| Watch | up to twice the normal swing |
+| Off track | more than twice the normal swing |
 
-- **Each KPI gets its own band.** This store's weekly revenue band is about 11%, while conversion rate's is about 4%. Over the last 52 weeks, a flat 5% rule would flag revenue 17 times, against 5 Off track weeks from its own band. It would catch only 7 conversion misses to the band's 9.
+- **Each KPI gets its own swing.** This store's weekly revenue usually swings about ±5–6% around target, while conversion rate swings about ±2%. Over the last 52 weeks, a flat 5% rule would flag revenue 17 times, against 5 Off track weeks from its own swing. It would catch only 7 conversion misses to the swing's 9.
 - **Interquartile range, not standard deviation.** One Black Friday miss in the window would blow a standard deviation wide open. The interquartile range shrugs it off.
 - **Lower-is-better KPIs flip the sign.** CAC and refund rate flip, so a negative miss always means worse.
 - **Ad spend is paced, not judged.** It shows Above plan or Below plan against its trajectory; spending more isn't good or bad by itself.
-- **New KPIs use a default band.** A KPI without a full window of past misses uses a 10% band.
+- **New KPIs use a default.** A KPI without a full window of past misses uses a 10% band, a ±5% normal swing.
 
 ## Data choices
 

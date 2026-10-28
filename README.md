@@ -34,15 +34,15 @@ target = same period last year × (last 13 weeks ÷ the same 13 weeks a year ear
 - Growth is capped between −33% and +50%.
 - Ratio KPIs (conversion rate, MER, CAC, margins) use ratios of sums.
 
-**Status.** Each KPI misses its target by a different amount in a normal period. The band is the interquartile range of the KPI's own misses over the previous 13 weeks (6 months, 4 quarters):
+**Status.** Each KPI misses its target by a different amount in a normal period. Its normal swing is half the interquartile range of its own misses over the previous 13 weeks (6 months, 4 quarters). The report shows it next to every status:
 
 | Status | Miss |
 |---|---|
-| On track | within half the band |
-| Watch | within the band |
-| Off track | beyond the band |
+| On track | within the normal swing |
+| Watch | up to twice the normal swing |
+| Off track | more than twice the normal swing |
 
-In the demo week, revenue is 4.3% under target and On track, because this store's weekly revenue normally misses by about ±11%. Conversion rate is 9.2% under target and Off track, because conversion normally barely moves.
+In the demo week, revenue is 4.3% under target against a normal swing of ±5.2%, so it's On track. Conversion rate is 9.2% under target against a normal swing of ±2.5%, so it's Off track.
 
 The bands also beat a flat ±5% rule over the last 52 weeks:
 

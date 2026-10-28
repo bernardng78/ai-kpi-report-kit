@@ -9,6 +9,7 @@ period.
 """
 from __future__ import annotations
 
+import math
 from datetime import datetime
 from pathlib import Path
 
@@ -34,6 +35,8 @@ from .targets import first_target_index
 FIRST_ROW = 3            # data and KPI tabs: two header rows, then one row per period
 SETTING_ROW = {"growth_min": 4, "growth_max": 5, "band_floor": 6, "band_cap": 7, "default_band": 8}
 CHART_PERIODS = {"week": 13, "month": 13, "quarter": 5}
+CHART_FIRST_COL = {"week": 1, "month": 8, "quarter": 15}  # each report's block on the Chart data tab
+SWING_FORMAT = '"±"0.0%'
 PERIOD_WORD = {"week": "Week", "month": "Month", "quarter": "Quarter"}
 ROW_CELL = "$X$5"        # report tabs: position of the chosen period in the KPI tab
 SECTION_START = 24       # report tabs: first section header row
@@ -88,7 +91,7 @@ def build_workbook(path: Path, cfg: Config, periods: dict[str, PeriodData], acti
     wb = Workbook()
     wb.remove(wb.active)
     order = ["Read me"] + [_sheet_names(g)[0] for g in GRAINS] + [_sheet_names(g)[1] for g in GRAINS] \
-        + [_sheet_names(g)[2] for g in GRAINS] + ["Actions", "KPI definitions", "Data checks", "Settings"]
+        + [_sheet_names(g)[2] for g in GRAINS] + ["Chart data", "Actions", "KPI definitions", "Data checks", "Settings"]
     for name in order:
         wb.create_sheet(name)
 
@@ -282,7 +285,7 @@ def _kpi_sheet(ws, grain: str, data: PeriodData, data_cols: dict[str, str]) -> d
 
 def _report_sheet(ws, grain: str, data: PeriodData, kpi_cols: dict[str, dict[str, str]], last_action_row: int,
                   default_key: str, cfg: Config) -> None:
-    report, kpi_tab, data_tab = _sheet_names(grain)
+    _, kpi_tab, data_tab = _sheet_names(grain)
     kpi_q, data_q = _q(kpi_tab), _q(data_tab)
     last = FIRST_ROW + len(data.table) - 1
     lag = WINDOWS[grain]["lag"]
@@ -309,7 +312,8 @@ def _report_sheet(ws, grain: str, data: PeriodData, kpi_cols: dict[str, dict[str
     ws["C5"].border = Border(left=HAIR, right=HAIR, top=HAIR, bottom=HAIR)
     ws["C5"].alignment = Alignment(horizontal="center")
     first_targeted = FIRST_ROW + first_target_index(data.table, next(k for k in KPIS if k.id == "net_rev"), grain)
-    dv = DataValidation(type="list", formula1=f"={kpi_q}!$A${first_targeted}:$A${last}", allow_blank=False)
+    # no leading "=": the file format stores list sources bare, and Google Sheets drops the rule otherwise
+    dv = DataValidation(type="list", formula1=f"{kpi_q}!$A${first_targeted}:$A${last}", allow_blank=False)
     dv.error = f"Pick a {word.lower()} from the list."
     dv.prompt = f"Pick any {word.lower()} with a target"
     ws.add_data_validation(dv)
@@ -324,19 +328,19 @@ def _report_sheet(ws, grain: str, data: PeriodData, kpi_cols: dict[str, dict[str
     ws["E5"].alignment = Alignment(horizontal="center")
     ws["G5"] = f"Pick any {word.lower()} in the yellow cell."
     ws["G5"].font = _font(color=d.MUTED, italic=True)
-    ws["B6"] = ("On track: within this KPI's normal variation.  Watch: a bigger miss than usual.  "
-                "Off track: far outside normal.  Bands come from each KPI's own past misses (see Read me).")
+    ws["B6"] = ("On track: the miss is within the KPI's normal swing.  Watch: up to twice its normal swing.  "
+                "Off track: more than twice.  Each KPI's normal swing comes from its own past misses (see Read me).")
     ws["B6"].font = _font(size=9, color=d.INK_2)
 
-    _trend_charts(ws, grain, kpi_cols, col)
+    _trend_charts(ws, grain, data, kpi_cols, col)
 
     r = SECTION_START
     status_cells = []
     for section in SECTIONS:
-        headers = [section, "Actual", "Target", "vs target", "Status", "Last year", "Note"]
+        headers = [section, "Actual", "Target", "vs target", "Status", "Normal swing", "Last year", "Note"]
         for j, h in enumerate(headers, start=2):
             ws.cell(r, j, h)
-        _style_header(ws[r][1:8])
+        _style_header(ws[r][1:9])
         ws.cell(r, 2).font = _font(bold=True, size=11)
         r += 1
         for kpi in [k for k in KPIS if k.section == section]:
@@ -345,8 +349,9 @@ def _report_sheet(ws, grain: str, data: PeriodData, kpi_cols: dict[str, dict[str
             ws[f"C{r}"] = f"={pick(c['actual'])}"
             ws[f"D{r}"] = f"={pick(c['target'])}"
             ws[f"E{r}"] = f"={pick(c['perf'])}"
-            ws[f"G{r}"] = f'=IF({ROW_CELL}>{lag},{pick(c["actual"], f"-{lag}")},"")'
-            ws[f"H{r}"] = NOTES.get(kpi.id, "")
+            ws[f"G{r}"] = f'=IF(ISNUMBER(E{r}),Y{r}/2,"")'  # half the band: the miss this KPI usually shows
+            ws[f"H{r}"] = f'=IF({ROW_CELL}>{lag},{pick(c["actual"], f"-{lag}")},"")'
+            ws[f"I{r}"] = NOTES.get(kpi.id, "")
             ws[f"Y{r}"] = (f'=IF(ISNUMBER({pick(c["band"])}),{pick(c["band"])},'
                            f'Settings!$B${SETTING_ROW["default_band"]})')
             ws[f"Z{r}"] = kpi.direction
@@ -354,10 +359,10 @@ def _report_sheet(ws, grain: str, data: PeriodData, kpi_cols: dict[str, dict[str
                            f'IF(E{r}<-Y{r},"Below plan","On plan")),IF(E{r}>=-Y{r}/2,"On track",'
                            f'IF(E{r}>=-Y{r},"Watch","Off track"))),"n/a")')
             for letter, fmt in [("C", d.NUMBER_FORMAT[kpi.fmt]), ("D", d.NUMBER_FORMAT[kpi.fmt]),
-                                ("E", d.PERF_FORMAT), ("G", d.NUMBER_FORMAT[kpi.fmt])]:
+                                ("E", d.PERF_FORMAT), ("G", SWING_FORMAT), ("H", d.NUMBER_FORMAT[kpi.fmt])]:
                 ws[f"{letter}{r}"].number_format = fmt
-            for letter in "BCDEFGH":
-                ws[f"{letter}{r}"].font = _font(color=d.INK_2 if letter == "H" else d.INK)
+            for letter in "BCDEFGHI":
+                ws[f"{letter}{r}"].font = _font(color=d.INK_2 if letter in "GI" else d.INK)
                 ws[f"{letter}{r}"].border = BOTTOM
             ws[f"F{r}"].alignment = Alignment(horizontal="center")
             status_cells.append(f"F{r}")
@@ -369,7 +374,7 @@ def _report_sheet(ws, grain: str, data: PeriodData, kpi_cols: dict[str, dict[str
             key = f'"{grain}|"&$C$5&"|{section}|{n}"'
             ws[f"B{r}"] = (f'=IFERROR("• "&INDEX(Actions!$F$2:$F${last_action_row},'
                            f'MATCH({key},Actions!$A$2:$A${last_action_row},0)),"")')
-            ws.merge_cells(start_row=r, start_column=2, end_row=r, end_column=8)
+            ws.merge_cells(start_row=r, start_column=2, end_row=r, end_column=9)
             ws[f"B{r}"].alignment = WRAP_TOP
             ws[f"B{r}"].font = _font()
             ws.row_dimensions[r].height = 28
@@ -380,9 +385,9 @@ def _report_sheet(ws, grain: str, data: PeriodData, kpi_cols: dict[str, dict[str
     for label, (_, tint) in d.STATUS.items():
         ws.conditional_formatting.add(rng, CellIsRule(operator="equal", formula=[f'"{label}"'],
                                                       fill=_fill(tint), font=Font(name=d.FONT, color=d.INK)))
-    for letter, width in zip("ABCDEFGH", [2, 30, 14, 14, 11, 12, 14, 44]):
+    for letter, width in zip("ABCDEFGHI", [2, 30, 14, 14, 11, 12, 13, 14, 40]):
         ws.column_dimensions[letter].width = width
-    for letter in ["X", "Y", "Z", "AA", "AB", "AC", "AD", "AE"]:
+    for letter in ["X", "Y", "Z"]:
         ws.column_dimensions[letter].hidden = True
     ws.freeze_panes = "A7"
     ws.page_setup.orientation = "landscape"
@@ -390,37 +395,65 @@ def _report_sheet(ws, grain: str, data: PeriodData, kpi_cols: dict[str, dict[str
     ws.sheet_properties.pageSetUpPr.fitToPage = True
 
 
-def _trend_charts(ws, grain: str, kpi_cols: dict[str, dict[str, str]], col) -> None:
-    """Hidden helper table of the last N periods, and two line charts on top of it."""
+def _axis_floor(values: pd.Series, money: bool) -> float:
+    """A round number a bit under the lowest value, so the axis doesn't flatten small changes against zero."""
+    low = float(values.min()) * 0.85
+    if low <= 0:
+        return 0.0
+    step = 10 ** math.floor(math.log10(low)) / 2 if money else 0.0025
+    return math.floor(low / step) * step
+
+
+def _trend_charts(ws, grain: str, data: PeriodData, kpi_cols: dict[str, dict[str, str]], col) -> None:
+    """Two line charts on the report, fed by this report's block on the Chart data tab.
+
+    The chart data lives on its own visible tab: spreadsheet charts skip hidden
+    cells by default, and Google Sheets drops such series on import.
+    """
+    targeted = data.table.iloc[first_target_index(data.table, next(k for k in KPIS if k.id == "net_rev"), grain):]
+    floors = {"net": _axis_floor(targeted["net_rev"], money=True),
+              "cr": _axis_floor(targeted["orders"] / targeted["sessions"], money=False)}
+    data_ws = ws.parent["Chart data"]
+    row_cell = f"{_q(ws.title)}!{ROW_CELL}"
     n = CHART_PERIODS[grain]
-    head = 7
-    series = [("AA", None, "Period"), ("AB", ("net_rev", "actual"), "Net revenue"),
-              ("AC", ("net_rev", "target"), "Target"), ("AD", ("cr", "actual"), "Conversion rate"),
-              ("AE", ("cr", "target"), "Target")]
-    for letter, source, title in series:
-        ws[f"{letter}{head}"] = title
+    c0 = CHART_FIRST_COL[grain]
+    head = 3
+    unit = {"week": "weeks", "month": "months", "quarter": "quarters"}[grain]
+    data_ws.cell(1, c0, f"{ws.title}: last {n} {unit} up to the chosen one").font = _font(bold=True)
+    series = [(None, "Period", None), (("net_rev", "actual"), "Net revenue", d.NUMBER_FORMAT["money"]),
+              (("net_rev", "target"), "Target", d.NUMBER_FORMAT["money"]),
+              (("cr", "actual"), "Conversion rate", d.NUMBER_FORMAT["pct2"]),
+              (("cr", "target"), "Target", d.NUMBER_FORMAT["pct2"])]
+    for j, (source, title, fmt) in enumerate(series):
+        letter = get_column_letter(c0 + j)
+        data_ws[f"{letter}{head}"] = title
+        _style_header([data_ws[f"{letter}{head}"]])
+        data_ws.column_dimensions[letter].width = 13
         for k in range(n):
-            r = head + 1 + k
             back = n - 1 - k
             column = "A" if source is None else kpi_cols[source[0]][source[1]]
-            value = f"INDEX({col(column)},{ROW_CELL}{f'-{back}' if back else ''})"
+            value = f"INDEX({col(column)},{row_cell}{f'-{back}' if back else ''})"
             shown = value if source is None else f'IF(ISNUMBER({value}),{value},"")'
-            ws[f"{letter}{r}"] = f'=IF({ROW_CELL}>{back},{shown},"")'
-    unit = {"week": "weeks", "month": "months", "quarter": "quarters"}[grain]
-    charts = [("Net revenue vs target", "AB", "AC", '"€"#,##0', "B8"),
-              ("Conversion rate vs target", "AD", "AE", "0.0%", "F8")]
-    cats = Reference(ws, min_col=27, min_row=head + 1, max_row=head + n)  # AA
-    for title, a, b, fmt, anchor in charts:
+            cell = data_ws[f"{letter}{head + 1 + k}"]
+            cell.value = f'=IF({row_cell}>{back},{shown},"")'
+            cell.font = _font()
+            if fmt:
+                cell.number_format = fmt
+    cats = Reference(data_ws, min_col=c0, min_row=head + 1, max_row=head + n)
+    charts = [("Net revenue vs target", c0 + 1, '"€"#,##0', "B8", 12.6, floors["net"]),
+              ("Conversion rate vs target", c0 + 3, "0.0%", "F8", 14.6, floors["cr"])]
+    for title, first_col, fmt, anchor, width, floor in charts:
         chart = LineChart()
         chart.title = f"{title}, last {n} {unit}"
-        chart.height, chart.width = 7.4, 12.6 if anchor == "B8" else 14.2
-        first_col = ws[f"{a}{head}"].column
-        chart.add_data(Reference(ws, min_col=first_col, max_col=first_col + 1, min_row=head, max_row=head + n),
+        chart.height, chart.width = 7.4, width
+        chart.y_axis.scaling.min = floor
+        chart.add_data(Reference(data_ws, min_col=first_col, max_col=first_col + 1, min_row=head, max_row=head + n),
                        titles_from_data=True)
         chart.set_categories(cats)
-        for s, color, width in zip(chart.series, [d.ACCENT, d.MUTED], [28575, 19050]):
+        chart.visible_cells_only = False
+        for s, color, line_width in zip(chart.series, [d.ACCENT, d.MUTED], [28575, 19050]):
             s.graphicalProperties.line.solidFill = color
-            s.graphicalProperties.line.width = width
+            s.graphicalProperties.line.width = line_width
             s.smooth = False
             s.marker = Marker(symbol="none")
         chart.y_axis.number_format = fmt
@@ -484,16 +517,17 @@ def _read_me(ws, cfg: Config, defaults: dict[str, str]) -> None:
                  "than a small one."),
         ("head", "How status is decided"),
         ("text", "Each KPI misses its target by a different amount in a normal period: revenue might swing ±5% "
-                 "week to week while conversion rate barely moves. The band is the spread (interquartile range) of "
-                 "the KPI's own misses over the previous periods. A miss within half the band is On track, within "
-                 "the band is Watch, and beyond it is Off track. So a 4% revenue miss can be normal while a 4% "
-                 "conversion miss is not."),
+                 "week to week while conversion rate barely moves. A KPI's normal swing is half the spread "
+                 "(interquartile range) of its own misses over the previous periods, shown in the report's Normal "
+                 "swing column. A miss within the normal swing is On track, up to twice the swing is Watch, and "
+                 "beyond that is Off track. So a 4% revenue miss can be normal while a 4% conversion miss is not."),
         ("head", "Colour code"),
         ("text", "Blue numbers come from the exports. Black numbers are formulas. Yellow cells are settings you "
                  "can change (period pickers, Settings tab)."),
         ("head", "Tabs"),
         ("text", "Weekly, Monthly and Quarterly report: the reports. KPIs tabs: actual, target, miss and band for "
-                 "every period, all formulas. Data tabs: the brand's numbers per period. Actions: the "
+                 "every period, all formulas. Data tabs: the brand's numbers per period. Chart data: the figures "
+                 "behind the report charts, following each report's chosen period. Actions: the "
                  "recommendations behind each report section, written by rules from the numbers. KPI definitions, "
                  "Data checks (everything the cleaning step fixed or flagged), Settings."),
         ("head", "Cost assumptions"),
